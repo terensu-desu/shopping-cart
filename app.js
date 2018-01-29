@@ -9,9 +9,11 @@ var mongoose = require("mongoose");
 var session = require("express-session");
 var passport = require("passport");
 var flash = require("connect-flash");
-
+var validator = require("express-validator");
+var MongoStore = require("connect-mongo")(session);
 
 var index = require("./routes/index");
+var userRoutes = require("./routes/user");
 
 var app = express();
 
@@ -28,15 +30,29 @@ app.set("view engine", ".hbs");
 app.use(logger("dev"));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(validator()); //must be in this order to handle bodyParser information properly
 app.use(cookieParser());
 app.use(
-	session({ secret: "mysupersecret", resave: false, saveUninitialized: false })
+	session({
+		secret: "mysupersecret",
+		resave: false,
+		saveUninitialized: false,
+		store: new MongoStore({ mongooseConnection: mongoose.connection }), //tells the store to use the current mongoose session
+		cookie: { maxAge: 180 * 60 * 1000 } //maxAge expects a value in milliseconds
+	})
 );
 app.use(flash());
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.static(path.join(__dirname, "public")));
 
+app.use(function(req, res, next) {
+	res.locals.login = req.isAuthenticated(); //makes the authenticated state available to views, avoids needing to explicitly declare to each
+	res.locals.session = req.session; ////makes the session variable available to views
+	next();
+});
+
+app.use("/user", userRoutes);
 app.use("/", index);
 
 // catch 404 and forward to error handler
